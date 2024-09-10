@@ -1,7 +1,7 @@
 const express = require("express");
 const mysql = require("mysql");
 const cors = require("cors");
-require("dotenv").config();
+require('dotenv').config();
 
 const app = express();
 
@@ -16,21 +16,25 @@ app.get("/", (req, res) =>
   )
 );
 
+
 // Database connection
 const connection = mysql.createConnection({
-  user: process.env.USER,
+  user: process.env.USER, 
   password: process.env.PASSWORD,
   host: process.env.HOST,
   database: process.env.DATABASE,
   // port: process.env.PORT
-}); 
+});
+
 
 connection.connect((err) => {
   if (err) console.log(err)
- else console.log("Connected to MySQL");
+  else console.log("Connected to MySQL");
 });
 
-// Route to create tables
+
+// table create api
+
 app.get("/install", (req, res) => {
   let name = `CREATE TABLE if not exists customers(
       customer_id int auto_increment, 
@@ -85,90 +89,122 @@ app.get("/install", (req, res) => {
 
 
 // route to insert data
+app.post("/insert-customer-data", (req, res) => {
+  const { name, address, company } = req.body; 
 
-app.post("/insert-customer-data", (req, res)  => {
-    // console.log(reqq.body.address);
-    const{name, address,company} = req.body;
+  // Insert into customers name table
+  let insertName = `INSERT INTO customers (name) VALUES (?)`;
 
-    let insertName = `INSERT INTO customers (name) VALUES ('${name}')`;
+  connection.query(insertName, [name], (err) => {
+      if (err) {
+          console.log(`Error Found: ${err}`);
+          return res.status(500).send("Error inserting customer name.");
+      }
+      console.log("Name inserted");
 
-  connection.query(insertName, (err) => {
-    if (err) console.log(`Error Found: ${err}`);
-    else console.log("name inserted successfully")
+      // Getting customer_id column data
+      connection.query(`SELECT * FROM customers WHERE name = ?`, [name], (err, rows) => {
+          if (err) {
+              console.log(err);
+              return res.status(500).send("Error retrieving customer ID.");
+          }
 
+          let nameAdded_id = rows[0].customer_id;
+
+          // Insert into address table
+          let insertAddress = `INSERT INTO address (customer_id, address) VALUES (?, ?)`;
+          connection.query(insertAddress, [nameAdded_id, address], (err) => {
+              if (err) {
+                  console.log(`Error Found: ${err}`);
+                  return res.status(500).send("Error inserting address.");
+              }
+              console.log("Address inserted");
+
+              // Insert into company table
+              let insertCompany = `INSERT INTO company (customer_id, company) VALUES (?, ?)`;
+              connection.query(insertCompany, [nameAdded_id, company], (err) => {
+                  if (err) {
+                      console.log(`Error Found: ${err}`);
+                      return res.status(500).send("Error inserting company.");
+                  }
+                  console.log("Company inserted");
+
+                  // All queries successful, send the response
+                  res.status(200).send("Data inserted to tables successfully.");
+                  console.log("Data inserted to tables");
+              });
+          });
+      });
   });
-//   getting  customers_id column data
-
-  connection.query(`SELECT * FROM customers WHERE name = "${name}"`, (err, rows) => {
-    if (err) console.log(err)
-    else console.log(rows)
-
-    let nameAdded_id = rows[0].customer_id;
-
-    let insertAddress = `INSERT INTO address (customer_id,address) VALUES ("${nameAdded_id}", "${address}")`;
-
-    let insertCompany = `INSERT INTO company (customer_id,company) VALUES ("${nameAdded_id}", "${company}")`;
-
-    connection.query(insertAddress, (err) => {
-      if (err) console.log(`Error Found: ${err}`);
-    });
-    connection.query(insertCompany, (err) => {
-      if (err) console.log(`Error Found: ${err}`);
-    });
-  });
-  res.status = 200
-  res.end("Data inserted to tables");
-  console.log("Data inserted to tables");
 });
 
 
 
+// route to retrive or get ALL customer, adress and company data 
+app.get("/customers", (req, res) =>{
 
-// Route to retrieve all customer data
+  const customersQuery  =  `SELECT
+  customers.customer_id AS ID, 
+  customers.name, 
+  address.address, 
+  company.company 
+  FROM customers 
+  JOIN address 
+  ON customers.customer_id = address.customer_id 
+  JOIN company
+  ON customers.customer_id = company.customer_id`
 
-app.get("/customers", (req, res) => {
-  
-  const customersQuery = 
-    `SELECT 
-    customers.customer_id AS ID, 
-    customers.name, 
-    address.address, 
-    company.company 
-    FROM customers 
-    JOIN address 
-    ON customers.customer_id = address.customer_id 
-    JOIN company 
-    ON customers.customer_id = company.customer_id`
 
-    connection.query(customersQuery,(err,results) => {
-      if (err) console.log("Error During selection", err);
-      else res.send(results);
-    }
-  );
-});
+  connection.query(customersQuery, (err, results) => {
+    if (err) console.log("Error During selection", err)
+    else res.send(results);
+  }
+);
 
-// Route to retrieve a customer by ID
+})
+
+// route retrive single customer data by ID
 app.get("/customers/:id", (req, res) => {
-  connection.query(
-    `SELECT customers.customer_id AS ID, customers.name FROM customers WHERE customers.customer_id = ${req.params.id}`,
-    (err, customerResults) => {
+  // console.log(req)
+
+  let selectCustomers = `SELECT 
+  customers.customer_id AS ID,
+  customers.name
+  FROM customers WHERE customers.customer_id = ${req.params.id}`
+
+  connection.query(selectCustomers, (err, customerResults) => {
       if (err) console.log("Error During selection", err);
 
-      connection.query(
-        `SELECT address.address FROM address WHERE address.customer_id = ${req.params.id}`,
-        (err, addressResults) => {
+    // console.log(customerResults)
+
+    let selectAdress = `SELECT 
+    address.address 
+    FROM address WHERE address.customer_id = ${req.params.id}`
+
+      connection.query(selectAdress, (err, addressResults) => {
           if (err) console.log("Error During selection", err);
 
-          connection.query(
-            `SELECT company.company FROM company WHERE company.customer_id = ${req.params.id}`,
-            (err, companyResults) => {
+          // console.log(addressResults)
+  
+    let selectCompany = `SELECT 
+    company.company 
+    FROM company WHERE company.customer_id = ${req.params.id}`
+
+          connection.query(selectCompany, (err, companyResults) => {
               if (err) console.log("Error During selection", err);
-              res.send({
+
+
+              // continue for the next table
+
+              // console.log(companyResults)
+              res.send(
+                {
                 id: customerResults[0]?.ID,
                 name: customerResults[0]?.name,
                 address: addressResults[0]?.address,
                 company: companyResults[0]?.company,
-              });
+              }
+            );
             }
           );
         }
@@ -177,235 +213,89 @@ app.get("/customers/:id", (req, res) => {
   );
 });
 
-// Route to update a customer's name
+
+// Route to update a customer's data
 app.put("/update", (req, res) => {
+  
   const { newName, newAddress, newCompany, id } = req.body;
 
-  // Start transaction
-  connection.beginTransaction((err) => {
+  // console.log(newName)
+
+  const updateCustomerQuery = `UPDATE customers SET name = ? WHERE customer_id = ?`;
+
+  const updateAddressQuery = `UPDATE address SET address = ? WHERE customer_id = ? `;
+
+  const updateCompanyQuery = `UPDATE company SET company = ? WHERE customer_id = ?`;
+
+  // Execute all update queries sequentially
+  connection.query(updateCustomerQuery, [newName, id], (err, results) => {
     if (err) {
       console.error(err);
-      return res.status(500).send("Error starting transaction.");
-    }
+      return res.status(500).send("Error updating customer name.");
+    } else console.log(results)
 
-    // Update customers table
-    let updateCustomerQuery = `
-      UPDATE customers
-      SET name = ?
-      WHERE customer_id = ?;
-    `;
-
-    connection.query(updateCustomerQuery, [newName, id], (err, result) => {
+    connection.query(updateAddressQuery, [newAddress, id], (err, results) => {
       if (err) {
-        return connection.rollback(() => {
-          console.error(err);
-          res.status(500).send("Error updating customer name.");
-        });
+        console.error(err);
+        return res.status(500).send("Error updating address.");
+      } else {
+        console.log(results)
       }
 
-      // Update address table
-      let updateAddressQuery = `
-        UPDATE address
-        SET address = ?
-        WHERE customer_id = ?;
-      `;
-
-      connection.query(updateAddressQuery, [newAddress, id], (err, result) => {
+      connection.query(updateCompanyQuery, [newCompany, id], (err, results) => {
         if (err) {
-          return connection.rollback(() => {
-            console.error(err);
-            res.status(500).send("Error updating address.");
-          });
+          console.error(err);
+          return res.status(500).send("Error updating company.");
+        } else {
+          console.log(results)
         }
 
-        // Update company table
-        let updateCompanyQuery = `
-          UPDATE company
-          SET company = ?
-          WHERE customer_id = ?;
-        `;
-
-        connection.query(updateCompanyQuery, [newCompany, id], (err, result) => {
-          if (err) {
-            return connection.rollback(() => {
-              console.error(err);
-              res.status(500).send("Error updating company.");
-            });
-          }
-
-          // Commit transaction
-          connection.commit((err) => {
-            if (err) {
-              return connection.rollback(() => {
-                console.error(err);
-                res.status(500).send("Error committing transaction.");
-              });
-            }
-
-            console.log("Transaction Complete.");
-            res.status(200)
-            res.send("Customer updated successfully!");
-          });
-        });
+        console.log("Customer updated successfully.");
+        res.status(200).send("Customer updated successfully!");
       });
     });
   });
 });
 
 
-app.delete("/remove-user",(req, res) => {
+// Route to delete a customer
+app.delete("/remove-user", (req, res) => {
+
   const { id } = req.body;
 
-  let removeName = `DELETE FROM customers WHERE customer_id = '${id}'`;
-  let removeAddress = `DELETE FROM address WHERE customer_id = '${id}'`;
-  let removeCompany = `DELETE FROM company WHERE customer_id = '${id}'`;
+  // Query strings
+  let removeName = `DELETE FROM customers WHERE customer_id = ?`;
+  let removeAddress = `DELETE FROM address WHERE customer_id = ?`;
+  let removeCompany = `DELETE FROM company WHERE customer_id = ?`;
 
-  connection.query(removeAddress, (err, result) => {
-    if (err) throw err;
-    console.log(result.affectedRows + " record(s) Deleted");
+  // Execute queries
+  connection.query(removeAddress, [id], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Error deleting address.");
+    }
+    console.log(result.affectedRows + " address record(s) Deleted");
   });
 
-  connection.query(removeCompany, (err, result) => {
-    if (err) throw err;
-    console.log(result.affectedRows + " record(s) Deleted");
+  connection.query(removeCompany, [id], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Error deleting company.");
+    }
+    console.log(result.affectedRows + " company record(s) Deleted");
   });
 
-  connection.query(removeName, (err, result) => {
-    if (err) throw err;
-    console.log(result.affectedRows + " record(s) Deleted");
+  connection.query(removeName, [id], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Error deleting customer.");
+    }
+    console.log(result.affectedRows + " customer record(s) Deleted");
   });
 
   res.send("Customer deleted");
 });
 
 
-
-
-  
-
-
-
-const port = 2025;
+const port = 2024;
 app.listen(port, () => console.log(`Listening on http://localhost:${port}`));
-
-
-
-
-// / route to retrive or get ALL customer, adress and company data 
-// app.get("/customers", (req, res) =>{
-
-//   const customersQuery  =  `SELECT
-//   customers.customer_id AS ID, 
-//   customers.name, 
-//   address.address, 
-//   company.company 
-//   FROM customers 
-//   JOIN address 
-//   ON customers.customer_id = address.customer_id 
-//   JOIN company
-//   ON customers.customer_id = company.customer_id`
-
-
-//   connection.query(customersQuery, (err, results) => {
-//     if (err) console.log("Error During selection", err)
-//     else res.send(results);
-//   }
-// );
-
-// })
-
-// // route retrive single customer data by ID
-// app.get("/customers/:id", (req, res) => {
-//   // console.log(req)
-
-//   let selectCustomers = `SELECT 
-//   customers.customer_id AS ID,
-//   customers.name
-//   FROM customers WHERE customers.customer_id = ${req.params.id}`
-
-//   connection.query(selectCustomers, (err, customerResults) => {
-//       if (err) console.log("Error During selection", err);
-
-//     // console.log(customerResults)
-
-//     let selectAdress = `SELECT 
-//     address.address 
-//     FROM address WHERE address.customer_id = ${req.params.id}`
-
-//       connection.query(selectAdress, (err, addressResults) => {
-//           if (err) console.log("Error During selection", err);
-
-//           // console.log(addressResults)
-  
-//     let selectCompany = `SELECT 
-//     company.company 
-//     FROM company WHERE company.customer_id = ${req.params.id}`
-
-//           connection.query(selectCompany, (err, companyResults) => {
-//               if (err) console.log("Error During selection", err);
-
-
-//               // continue for the next table
-
-//               // console.log(companyResults)
-//               res.send(
-//                 {
-//                 id: customerResults[0]?.ID,
-//                 name: customerResults[0]?.name,
-//                 address: addressResults[0]?.address,
-//                 company: companyResults[0]?.company,
-//               }
-//             );
-//             }
-//           );
-//         }
-//       );
-//     }
-//   );
-// });
-
-
-// // Route to update a customer's data
-// app.put("/update", (req, res) => {
-//   const { newName, newAddress, newCompany, id } = req.body;
-
-//   // console.log(newName)
-
-//   const updateCustomerQuery = UPDATE customers SET name = '${newName}' WHERE customer_id = '${id}';
-
-//   const updateAddressQuery = UPDATE address SET address = '${newAddress}' WHERE customer_id = '${id}';
-
-//   const updateCompanyQuery = UPDATE company SET company = '${newCompany}' WHERE customer_id = '${id}';
-
-//   // Execute all update queries sequentially
-//   connection.query(updateCustomerQuery, (err, results) => {
-//     if (err) {
-//       console.error(err);
-//       return res.status(500).send("Error updating customer name.");
-//     } else console.log(results)
-
-//     connection.query(updateAddressQuery, (err, results) => {
-//       if (err) {
-//         console.error(err);
-//         return res.status(500).send("Error updating address.");
-//       } else {
-//         console.log(results)
-//       }
-
-//       connection.query(updateCompanyQuery, (err, results) => {
-//         if (err) {
-//           console.error(err);
-//           return res.status(500).send("Error updating company.");
-//         } else {
-//           console.log(results)
-//         }
-
-//         console.log("Customer updated successfully.");
-//         res.status(200).send("Customer updated successfully!");
-//       });
-//     });
-//   });
-// });
-
-
-
